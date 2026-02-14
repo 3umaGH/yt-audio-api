@@ -13,6 +13,7 @@ from pathlib import Path
 import yt_dlp
 import access_manager
 from constants import *
+import os
 
 # Initialize the Flask application
 app = Flask(__name__)
@@ -113,7 +114,7 @@ def main():
         daemon=True
     )
     token_cleaner_thread.start()
-    app.run(debug=True)
+    app.run(host=os.environ.get("FLASK_RUN_HOST", "127.0.0.1"), debug=True)
 
 
 if __name__ == "__main__":
