@@ -65,6 +65,8 @@ def get_audio_file(token: str) -> str:
     Returns:
         str: The filename of the audio file.
     """
+    print(audio_files[token])
+    print(audio_files)
     return audio_files[token]
 
 def remove_expired_tokens() -> list:
