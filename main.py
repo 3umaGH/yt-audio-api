@@ -7,7 +7,8 @@ Utilizes yt-dlp and FFmpeg for conversion and token-based access management.
 
 import secrets
 import threading
-from flask import Flask, request, jsonify, send_from_directory
+import re
+from flask import Flask, request, jsonify
 from uuid import uuid4
 from pathlib import Path
 import yt_dlp
@@ -27,6 +28,7 @@ def handle_audio_request():
 
     Query Parameters:
         - url (str): Full YouTube video URL.
+        - recipient (num): 1 - own, 2 - friend
 
     Returns:
         - JSON: {"token": <download_token>}
@@ -35,8 +37,50 @@ def handle_audio_request():
     if not video_url:
         return jsonify(error="Missing 'url' parameter in request."), BAD_REQUEST
 
-    filename = f"{uuid4()}.mp3"
-    output_path = Path(ABS_DOWNLOADS_PATH) / filename
+    recipient = request.args.get("recipient")
+
+    if recipient not in ["1", "2"]:
+        return jsonify(error="Invalid 'recipient' parameter. Must be 1 (own) or 2 (friend)."), BAD_REQUEST
+
+    folder = None
+
+    api_key = request.args.get("key")
+
+    if not api_key:
+        return jsonify(error="Missing 'key' parameter in request."), BAD_REQUEST
+    
+    if not api_key == os.environ.get("API_KEY","123"):
+        return jsonify(error="Invalid API key."), UNAUTHORIZED
+
+    match recipient:
+        case "1":
+            folder = os.environ.get("RECIPIENT_1_FOLDER")
+            pass
+        case "2":
+            folder = os.environ.get("RECIPIENT_2_FOLDER")
+            pass
+
+    # First, extract video info to get the title
+    info_opts = {'quiet': True}
+    try:
+        with yt_dlp.YoutubeDL(info_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            video_title = info.get('title', 'unknown_video')
+    except Exception as e:
+        return jsonify(error="Failed to extract video information.", detail=str(e)), INTERNAL_SERVER_ERROR
+
+    # Clean the title to make it filesystem-safe
+    safe_title = re.sub(r'[^\w\s-]', '', video_title)  # Remove special characters
+    safe_title = re.sub(r'[-\s]+', '-', safe_title)    # Replace spaces and multiple dashes with single dash
+    safe_title = safe_title.strip('-')                 # Remove leading/trailing dashes
+    
+    # Limit filename length and add UUID suffix to ensure uniqueness
+    if len(safe_title) > 50:
+        safe_title = safe_title[:50]
+    
+    base_filename = f"{safe_title}_{str(uuid4())[:8]}"
+    output_path = Path("/", folder, "yt") / base_filename
+    print("Output path for download:", output_path)
 
     # yt-dlp configuration for downloading best audio and converting to mp3
     ydl_opts = {
@@ -56,37 +100,9 @@ def handle_audio_request():
     except Exception as e:
         return jsonify(error="Failed to download or convert audio.", detail=str(e)), INTERNAL_SERVER_ERROR
 
-    return _generate_token_response(filename)
-
-
-@app.route("/download", methods=["GET"])
-def download_audio():
-    """
-    Endpoint to serve an audio file associated with a given token.
-    If token is valid and not expired, returns the associated MP3 file.
-
-    Query Parameters:
-        - token (str): Unique access token
-
-    Returns:
-        - MP3 audio file as attachment or error JSON
-    """
-    token = request.args.get("token")
-    if not token:
-        return jsonify(error="Missing 'token' parameter in request."), BAD_REQUEST
-
-    if not access_manager.has_access(token):
-        return jsonify(error="Token is invalid or unknown."), UNAUTHORIZED
-
-    if not access_manager.is_valid(token):
-        return jsonify(error="Token has expired."), REQUEST_TIMEOUT
-
-    try:
-        filename = access_manager.get_audio_file(token)
-        return send_from_directory(ABS_DOWNLOADS_PATH, filename=filename, as_attachment=True)
-    except FileNotFoundError:
-        return jsonify(error="Requested file could not be found on the server."), NOT_FOUND
-
+    # yt-dlp adds .mp3 extension during post-processing
+    actual_filename = f"{base_filename}.mp3"
+    return jsonify(result="success", file=actual_filename)
 
 def _generate_token_response(filename: str):
     """
