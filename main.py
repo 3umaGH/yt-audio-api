@@ -10,6 +10,7 @@ import threading
 import re
 import os
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from uuid import uuid4
 from pathlib import Path
 import yt_dlp
@@ -20,6 +21,9 @@ from mutagen.mp3 import MP3
 
 # Initialize the Flask application
 app = Flask(__name__)
+# Enable CORS for all origins (useful for public APIs or development).
+# If you need stricter rules, replace '*' with a list of allowed origins.
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 
 @app.route("/", methods=["GET"])

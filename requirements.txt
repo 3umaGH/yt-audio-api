@@ -10,6 +10,7 @@ MarkupSafe==1.1.1
 Werkzeug==1.0.1
 yt-dlp>=2024.1.1
 mutagen>=1.47.0
+Flask-Cors>=3.0.10
 
 # System requirement (install manually if missing)
 # FFmpeg must be installed separately for audio conversion
